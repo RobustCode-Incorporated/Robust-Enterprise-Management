@@ -16,12 +16,22 @@ class SalesDocument {
   });
 
   factory SalesDocument.fromJson(Map<String, dynamic> json) {
+    // Parsing ultra-robuste pour parer aux chaînes de caractères renvoyées par PostgreSQL (Numeric/Decimal)
+    final rawAmount = json['total_amount'];
+    double parsedAmount = 0.0;
+    
+    if (rawAmount is num) {
+      parsedAmount = rawAmount.toDouble();
+    } else if (rawAmount is String) {
+      parsedAmount = double.tryParse(rawAmount) ?? 0.0;
+    }
+
     return SalesDocument(
       id: json['id'] as String,
       type: json['type'] as String,
       number: json['number'] as String,
       status: json['status'] as String,
-      totalAmount: (json['total_amount'] as num).toDouble(),
+      totalAmount: parsedAmount,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

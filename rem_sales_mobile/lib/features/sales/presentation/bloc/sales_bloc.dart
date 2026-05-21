@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 import '../../data/models/sales_document_model.dart';
+import '../../data/repositories/sales_repository.dart'; // Import du dépôt réseau
 
 abstract class SalesState {}
 class SalesInitial extends SalesState {}
@@ -14,31 +15,29 @@ class SalesError extends SalesState {
 }
 
 class SalesBloc {
+  final SalesRepository repository = SalesRepository(); // Injection du gestionnaire réseau
   SalesState _state = SalesInitial();
   SalesState get state => _state;
-  final List<SalesDocument> _mockPipeline = [];
+  final List<SalesDocument> _realPipeline = [];
 
   Future<void> createDocument(String clientId, String type, double amount) async {
     _state = SalesLoading();
-    developer.log('[BLOC EVENT] Déclenchement de la création du document', name: 'REM.Sales');
+    developer.log('[BLOC NETWORK] Envoi de la demande au serveur...', name: 'REM.Sales');
 
     try {
-      await Future.delayed(const Duration(milliseconds: 600));
-      
-      final newDoc = SalesDocument(
-        id: 'local-uuid-${DateTime.now().millisecond}',
+      // On effectue le vrai appel HTTP asynchrone
+      final newDoc = await repository.sendDocumentToBackend(
+        clientId: clientId,
         type: type,
-        number: '${type == 'QUOTE' ? 'DEV' : 'FAC'}-${DateTime.now().year}-${DateTime.now().millisecond}',
-        status: 'DRAFT',
-        totalAmount: amount,
-        createdAt: DateTime.now(),
+        amount: amount,
       );
 
-      _mockPipeline.add(newDoc);
-      _state = SalesSuccess(List.from(_mockPipeline));
-      developer.log('[BLOC SUCCESS] Élément ajouté au pipeline: ${newDoc.number}', name: 'REM.Sales');
+      _realPipeline.add(newDoc);
+      _state = SalesSuccess(List.from(_realPipeline));
+      developer.log('[BLOC SUCCESS] Réponse reçue de l\'API. Numéro généré: ${newDoc.number}', name: 'REM.Sales');
     } catch (e) {
       _state = SalesError(e.toString());
+      developer.log('[BLOC ERROR] La requête réseau a échoué: $e', name: 'REM.Sales');
     }
   }
 }
