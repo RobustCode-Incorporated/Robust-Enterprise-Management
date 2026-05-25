@@ -1,30 +1,36 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:mocktail/mocktail.dart';
+import 'package:isar/isar.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rem_sales_mobile/main.dart';
+import 'package:rem_sales_mobile/features/sales/data/datasources/sync_manager.dart';
+
+// Création des mocks nécessaires pour simuler le démarrage de MyApp
+class MockIsar extends Mock implements Isar {}
+class MockSyncManager extends Mock implements SyncManager {}
+class MockHttpClient extends Mock implements http.Client {}
+class MockSecureStorage extends Mock implements FlutterSecureStorage {}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('🚀 [CORE TEST] L\'application charge l\'infrastructure REM initiale avec succès', (WidgetTester tester) async {
+    final mockIsar = MockIsar();
+    final mockSyncManager = MockSyncManager();
+    final mockHttpClient = MockHttpClient();
+    final mockSecureStorage = MockSecureStorage();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // On simule une lecture vide dans le stockage chiffré pour forcer l'état Unauthenticated au boot
+    when(() => mockSecureStorage.read(key: 'jwt_token')).thenAnswer((_) => Future.value(null));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Lancement virtuel de l'application complète
+    await tester.pumpWidget(MyApp(
+      isar: mockIsar,
+      syncManager: mockSyncManager,
+      httpClient: mockHttpClient,
+      secureStorage: mockSecureStorage,
+    ));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Simple vérification que le moteur de rendu a démarré sans planter
+    expect(find.byType(MyApp), findsOneWidget);
   });
 }

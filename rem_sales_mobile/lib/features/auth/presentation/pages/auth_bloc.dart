@@ -11,7 +11,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   
   // URL de ton serveur backend (à adapter selon ton déploiement)
   // En local Codespace, on utilise souvent l'URL publique générée ou l'IP du conteneur
-  final String authUrl = 'http://localhost:3000/api/auth/login'; 
+  final String authUrl = 'https://animated-lamp-pjppjx9p9pqg367vg-3000.app.github.dev/'; 
 
   AuthBloc({
     required this.httpClient,
