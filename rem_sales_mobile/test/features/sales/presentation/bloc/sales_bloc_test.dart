@@ -43,17 +43,17 @@ void main() {
     blocTest<SalesBloc, SalesState>(
       'Devrait émettre [SalesLoading, SalesSuccess] quand la sauvegarde réussit',
       build: () {
-        when(() => mockSalesRepository.saveSalesDocument(any()))
+        when(() => mockSalesRepository.saveSalesDocument(any(), any()))
             .thenAnswer((_) async => {});
         return salesBloc;
       },
-      act: (bloc) => bloc.add(SaveDocumentEvent(testDocument)),
+      act: (bloc) => bloc.add(SaveDocumentEvent(testDocument, const [])),
       expect: () => [
         isA<SalesLoading>(),
         isA<SalesSuccess>(),
       ],
       verify: (_) {
-        verify(() => mockSalesRepository.saveSalesDocument(any())).called(1);
+        verify(() => mockSalesRepository.saveSalesDocument(any(), any())).called(1);
       },
     );
   });

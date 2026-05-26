@@ -16,7 +16,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     emit(SalesLoading());
     try {
       // Appel à notre repository qui gère la persistence Isar ++ la synchro réseau
-      await salesRepository.saveSalesDocument(event.document);
+      await salesRepository.saveSalesDocument(event.document, event.cartItems);
       emit(SalesSuccess());
     } catch (e) {
       emit(SalesError(e.toString()));

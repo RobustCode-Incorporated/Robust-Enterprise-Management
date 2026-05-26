@@ -10,11 +10,12 @@ abstract class SalesEvent extends Equatable {
 
 class SaveDocumentEvent extends SalesEvent {
   final SalesDocument document;
+  final List<Map<String, dynamic>> cartItems;
 
-  const SaveDocumentEvent(this.document);
+  const SaveDocumentEvent(this.document, this.cartItems);
 
   @override
-  List<Object?> get props => [document];
+  List<Object?> get props => [document, cartItems];
 }
 
 /// 📦 JALON INVENTORY : Événement pour charger le catalogue d'articles Multi-Tenant depuis Isar DB

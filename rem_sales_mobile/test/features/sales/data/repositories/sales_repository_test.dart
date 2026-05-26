@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:isar/isar.dart';
 import 'package:rem_sales_mobile/features/sales/data/models/local_sales_document.dart';
 import 'package:rem_sales_mobile/features/sales/data/models/sales_document_model.dart';
+import 'package:rem_sales_mobile/features/sales/data/models/product_model.dart'; // 📦 AJOUT : Import du modèle de produit Isar
 import 'package:rem_sales_mobile/features/sales/data/datasources/sync_manager.dart';
 import 'package:rem_sales_mobile/features/sales/data/repositories/sales_repository.dart';
 
@@ -21,7 +22,11 @@ void main() {
   });
 
   setUp(() async {
-    isar = await Isar.open([LocalSalesDocumentSchema], directory: tempDir.path);
+    // 🛡️ MODIFICATION : Ajout de ProductModelSchema pour qu'Isar puisse gérer les produits dans la transaction
+    isar = await Isar.open(
+      [LocalSalesDocumentSchema, ProductModelSchema], 
+      directory: tempDir.path,
+    );
     
     // Faux client HTTP qui simule une réussite d'envoi API
     final mockHttpClient = MockClient((request) async {
@@ -44,18 +49,46 @@ void main() {
         type: 'INVOICE',
         number: 'FACT-REPO-001',
         status: 'DRAFT',
-        totalAmount: 120000.0,
+        totalAmount: 4500.0,
         createdAt: DateTime.now(),
       );
 
-      // Act
-      await repository.saveSalesDocument(newInvoice);
+      // 🌱 Préparer un produit fictif en base Isar pour que la déduction automatique de stock fonctionne
+      final testProduct = ProductModel(
+        companyId: 'robust-corp-africa-123',
+        name: 'Sac de Ciment 50kg',
+        purchasePrice: 3500.0,
+        sellingPrice: 4500.0,
+        stockQuantity: 100, // Stock de départ
+        code: 'CIM-50K',
+      );
 
-      // Assertions locale
+      await isar.writeTxn(() async {
+        await isar.productModels.put(testProduct);
+      });
+
+      // 🛒 Simuler un panier contenant cet article
+      final mockCart = [
+        {
+          'name': 'Sac de Ciment 50kg',
+          'price': 4500.0,
+          'quantity': 10, // Le client achète 10 sacs
+        }
+      ];
+
+      // Act : On passe désormais le document ET le panier associé
+      await repository.saveSalesDocument(newInvoice, mockCart);
+
+      // Assertions locales (Facture)
       final localDoc = await isar.localSalesDocuments.filter().idEqualTo('repo-uuid-111').findFirst();
       expect(localDoc, isNotNull);
       expect(localDoc!.number, 'FACT-REPO-001');
       expect(localDoc.isSynced, isTrue); // Le SyncManager a réussi à l'envoyer
+
+      // Assertions d'Inventaire (Vérifier que le stock a baissé de 10 unités : 100 - 10 = 90)
+      final updatedProduct = await isar.productModels.filter().nameEqualTo('Sac de Ciment 50kg').findFirst();
+      expect(updatedProduct, isNotNull);
+      expect(updatedProduct!.stockQuantity, equals(90));
     });
 
     test('🔴 TDD: Devrait mettre à jour le statut à PAID en local et sur l\'API (Encaissement)', () async {

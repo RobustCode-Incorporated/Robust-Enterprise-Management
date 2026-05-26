@@ -310,7 +310,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         createdAt: DateTime.now(),
                       );
 
-                      context.read<SalesBloc>().add(SaveDocumentEvent(newDocument));
+                      context.read<SalesBloc>().add(SaveDocumentEvent(newDocument, _dynamicCartItems));
                     },
                   );
                 },
