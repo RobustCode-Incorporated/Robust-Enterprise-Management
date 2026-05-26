@@ -17,7 +17,7 @@ class _SalesScreenState extends State<SalesScreen> {
   final List<String> _currencies = ['XOF', 'USD', 'EUR', 'CAD'];
   late String _selectedCurrency;
 
-  // 🛒 PANIER DYNAMIQUE : Remplace les mocks statiques
+  // 🛒 PANIER DYNAMIQUE : Contient les articles sélectionnés
   final List<Map<String, dynamic>> _dynamicCartItems = [];
 
   // 🛡️ MULTI-TENANT LOCAL : Pour simuler l'entreprise du commercial connecté (ex: Robust Capital Africa)
@@ -38,10 +38,25 @@ class _SalesScreenState extends State<SalesScreen> {
     return _dynamicCartItems.fold(0, (sum, item) => sum + (item['price'] * item['quantity']));
   }
 
-  // 📥 Logique métier d'ajout au panier
+  // 📥 Logique métier d'ajout au panier avec garde-fou d'inventaire "Fail-Fast"
   void _addProductToCart(ProductModel product) {
+    final existingIndex = _dynamicCartItems.indexWhere((item) => item['serverId'] == product.serverId || item['name'] == product.name);
+    final currentQuantityInCart = existingIndex >= 0 ? _dynamicCartItems[existingIndex]['quantity'] : 0;
+
+    // 🛡️ Blocage préventif si la demande excède le stock physique disponible
+    if (currentQuantityInCart >= product.stockQuantity) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🛑 Impossible d\'ajouter plus de "${product.name}". Stock maximal atteint !'),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     setState(() {
-      final existingIndex = _dynamicCartItems.indexWhere((item) => item['serverId'] == product.serverId || item['name'] == product.name);
       if (existingIndex >= 0) {
         _dynamicCartItems[existingIndex]['quantity'] += 1;
       } else {
@@ -128,7 +143,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
 
-            // 📦 SECTION 2 : Le Catalogue Dynamique (Isar DB)
+            // 📦 SECTION 2 : Le Catalogue Dynamique avec Alertes de Stock Visuelles
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 14.0, vertical: 4),
               child: Row(
@@ -141,7 +156,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             
             SizedBox(
-              height: 125, // Un poil plus grand pour laisser respirer l'UI suite à l'agencement vertical
+              height: 125,
               child: BlocBuilder<SalesBloc, SalesState>(
                 buildWhen: (previous, current) => current is ProductsLoading || current is ProductsLoadSuccess,
                 builder: (context, state) {
@@ -161,54 +176,79 @@ class _SalesScreenState extends State<SalesScreen> {
                       itemCount: products.length,
                       itemBuilder: (context, index) {
                         final product = products[index];
+                        
+                        // 📊 Détermination des seuils d'alertes d'inventaire
+                        final bool isOutOfStock = product.stockQuantity <= 0;
+                        final bool isLowStock = !isOutOfStock && product.stockQuantity <= (product.minStockAlert ?? 5);
+
+                        // Définition de la charte graphique de l'alerte
+                        Color badgeColor = Colors.orange;
+                        String badgeText = 'Stock: ${product.stockQuantity}';
+                        if (isOutOfStock) {
+                          badgeColor = Colors.red;
+                          badgeText = 'Rupture';
+                        } else if (isLowStock) {
+                          badgeColor = Colors.redAccent;
+                          badgeText = 'Alerte: ${product.stockQuantity}';
+                        }
+
                         return GestureDetector(
                           onTap: () => _addProductToCart(product),
-                          child: Container(
-                            width: 155,
-                            margin: const EdgeInsets.only(right: 10, bottom: 8, top: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, spreadRadius: 1)],
-                              border: Border.all(color: Colors.indigo.withOpacity(0.1)),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    product.name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                  ),
-                                  // 🛡️ DESIGN ADAPTATIF ANTI-OVERFLOW : Agencement vertical pour isoler le prix du stock
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${product.sellingPrice.toInt()} $_selectedCurrency', 
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(0.1), 
-                                          borderRadius: BorderRadius.circular(4),
+                          child: Opacity(
+                            opacity: isOutOfStock ? 0.55 : 1.0, // Assombrit la carte si rupture
+                            child: Container(
+                              width: 155,
+                              margin: const EdgeInsets.only(right: 10, bottom: 8, top: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, spreadRadius: 1)],
+                                border: Border.all(
+                                  color: isOutOfStock 
+                                      ? Colors.red.withOpacity(0.3) 
+                                      : isLowStock 
+                                          ? Colors.redAccent.withOpacity(0.3) 
+                                          : Colors.indigo.withOpacity(0.1),
+                                  width: (isOutOfStock || isLowStock) ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${product.sellingPrice.toInt()} $_selectedCurrency', 
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)
                                         ),
-                                        child: Text(
-                                          'Stock: ${product.stockQuantity}', 
-                                          style: const TextStyle(fontSize: 9, color: Colors.orange, fontWeight: FontWeight.bold)
-                                        ),
-                                      )
-                                    ],
-                                  )
-                                ],
+                                        const SizedBox(height: 2),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: badgeColor.withOpacity(0.12), 
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            badgeText, 
+                                            style: TextStyle(fontSize: 9, color: badgeColor, fontWeight: FontWeight.bold)
+                                          ),
+                                        )
+                                      ],
+                                    )
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -221,7 +261,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
 
-            // 🛒 SECTION 3 : Le Panier Courant (Calculé dynamiquement)
+            // 🛒 SECTION 3 : Le Panier Courant
             Expanded(
               child: Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
