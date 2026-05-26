@@ -164,45 +164,46 @@ export const updateDocumentStatus = async (req: Request, res: Response): Promise
   }
 };
 // ==========================================
-// 4. SYNCHRONISATION OFFLINE-FIRST (MOBILE)
+// 4. SYNCHRONISATION OFFLINE-FIRST (MOBILE) - FIXED
 // ==========================================
 export const syncOfflineDocument = async (req: Request, res: Response): Promise<void> => {
-  const { id, type, number, status, totalAmount } = req.body;
-  const companyId = (req as any).user?.companyId; // Récupération du multi-tenant sécurisé
+  const { id, type, number, status, totalAmount, items } = req.body; // 📦 Récupération des items
+  const companyId = (req as any).user?.companyId;
 
-  logger.info({ companyId, documentId: id, number }, '[REM SALES SYNC] Réception d\'un document synchronisé');
+  logger.info({ companyId, documentId: id, number }, '[REM SALES SYNC] Réception d\'un document et de ses articles');
 
-  if (!id || !type || !number || !status || totalAmount === undefined) {
-    res.status(400).json({ error: 'Champs de synchronisation obligatoires manquants.' });
+  if (!id || !type || !number || !status || totalAmount === undefined || !items || !Array.isArray(items)) {
+    res.status(400).json({ error: 'Champs de synchronisation ou tableau d\'articles obligatoires manquants.' });
     return;
   }
 
   try {
-    // Appel du modèle mis à jour
+    // Appel du modèle mis à jour qui exécute la transaction globale ACID
     await SalesModel.syncMobileDocument({
       id,
       companyId,
       type,
       number,
       status,
-      totalAmount: Number(totalAmount)
+      totalAmount: Number(totalAmount),
+      items
     });
 
-    logger.info({ documentId: id, number }, '[REM SALES SYNC SUCCESS] Document poussé en base Neon');
+    logger.info({ documentId: id, number }, '[REM SALES SYNC SUCCESS] Document et stocks synchronisés dans Neon');
 
     res.status(201).json({
       success: true,
-      message: 'Document de vente synchronisé avec succès',
+      message: 'Document de vente et stocks synchronisés avec succès',
       documentId: id
     });
   } catch (error: any) {
-    logger.error(error, '[REM SALES SYNC ERROR] Échec de la synchronisation');
+    logger.error(error, '[REM SALES SYNC ERROR] Échec de la transaction de synchronisation');
     
     if (error.code === '23505') {
       res.status(409).json({ error: 'Un document avec ce numéro ou cet identifiant existe déjà.' });
       return;
     }
 
-    res.status(500).json({ error: 'Erreur fatale lors de la synchronisation en base.' });
+    res.status(500).json({ error: 'Erreur fatale lors de l\'écriture synchronisée en base.' });
   }
 };
