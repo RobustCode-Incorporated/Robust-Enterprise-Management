@@ -4,7 +4,8 @@ import 'package:rem_sales_mobile/features/sales/presentation/bloc/sales_bloc.dar
 import 'package:rem_sales_mobile/features/sales/presentation/bloc/sales_event.dart';
 import 'package:rem_sales_mobile/features/sales/presentation/bloc/sales_state.dart';
 import 'package:rem_sales_mobile/features/sales/data/models/sales_document_model.dart'; 
-import 'package:rem_sales_mobile/features/sales/data/models/product_model.dart'; // 📦 Import du modèle de produit Isar
+import 'package:rem_sales_mobile/features/sales/data/models/product_model.dart'; 
+import 'package:rem_sales_mobile/features/sales/domain/services/receipt_service.dart'; // 📦 AJOUT : Import du service d'impression
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -16,6 +17,9 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   final List<String> _currencies = ['XOF', 'USD', 'EUR', 'CAD'];
   late String _selectedCurrency;
+
+  // 🚀 INSTANCE : Initialisation de notre ReceiptService
+  final ReceiptService _receiptService = ReceiptService();
 
   // 🛒 PANIER DYNAMIQUE : Contient les articles sélectionnés
   final List<Map<String, dynamic>> _dynamicCartItems = [];
@@ -70,6 +74,83 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
+  /// 📱 DIALOGUE DE GESTION DES REÇUS : Offre l'impression Bluetooth et le partage WhatsApp
+  void _showReceiptDialog(SalesDocument document, List<Map<String, dynamic>> finalCartItems) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Force une action explicite pour fermer la modale
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Vente Enregistrée !',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Facture : ${document.number}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('Montant total : ${_calculateTotal().toInt()} $_selectedCurrency', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text(
+                'Souhaitez-vous remettre un reçu au client ? Vous pouvez l\'imprimer en direct ou le partager sous format PDF.',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fermer', style: TextStyle(color: Colors.grey)),
+            ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.share, color: Colors.indigo),
+                  tooltip: 'Partager le PDF (WhatsApp...)',
+                  onPressed: () async {
+                    await _receiptService.shareReceipt(
+                      document: document,
+                      cartItems: finalCartItems,
+                      currency: _selectedCurrency,
+                    );
+                  },
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Imprimer'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: () async {
+                    await _receiptService.printReceipt(
+                      document: document,
+                      cartItems: finalCartItems,
+                      currency: _selectedCurrency,
+                    );
+                  },
+                ),
+              ],
+            )
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final totalAmount = _calculateTotal();
@@ -83,16 +164,27 @@ class _SalesScreenState extends State<SalesScreen> {
       body: BlocListener<SalesBloc, SalesState>(
         listener: (context, state) {
           if (state is SalesSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('🎉 Vente enregistrée avec succès en local (Isar) !'),
-                backgroundColor: Colors.green,
-              ),
+            // 🛡️ SÉCURITÉ DATA : On fait une copie profonde à la volée du panier avant de le resetter
+            final List<Map<String, dynamic>> archivedCartItems = List.from(_dynamicCartItems);
+
+            // Création d'un objet document factice temporaire mais aligné pour nourrir le générateur
+            // S'il n'est pas fourni par l'état, on reconstruit ses informations clés.
+            final completedDoc = SalesDocument(
+              id: 'mob-uuid-${DateTime.now().microsecondsSinceEpoch}',
+              type: 'INVOICE',
+              number: 'FACT-${DateTime.now().millisecondsSinceEpoch}',
+              status: 'PAID',
+              totalAmount: totalAmount,
+              createdAt: DateTime.now(),
             );
-            // On vide le panier après encaissement réussi
+
+            // On vide le panier après encaissement réussi pour libérer l'UI
             setState(() {
               _dynamicCartItems.clear();
             });
+
+            // 🚀 DÉCLENCHEMENT : Ouverture instantanée de la boîte de gestion du reçu
+            _showReceiptDialog(completedDoc, archivedCartItems);
           } else if (state is SalesError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -177,11 +269,9 @@ class _SalesScreenState extends State<SalesScreen> {
                       itemBuilder: (context, index) {
                         final product = products[index];
                         
-                        // 📊 Détermination des seuils d'alertes d'inventaire
                         final bool isOutOfStock = product.stockQuantity <= 0;
                         final bool isLowStock = !isOutOfStock && product.stockQuantity <= (product.minStockAlert ?? 5);
 
-                        // Définition de la charte graphique de l'alerte
                         Color badgeColor = Colors.orange;
                         String badgeText = 'Stock: ${product.stockQuantity}';
                         if (isOutOfStock) {
@@ -195,7 +285,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         return GestureDetector(
                           onTap: () => _addProductToCart(product),
                           child: Opacity(
-                            opacity: isOutOfStock ? 0.55 : 1.0, // Assombrit la carte si rupture
+                            opacity: isOutOfStock ? 0.55 : 1.0,
                             child: Container(
                               width: 155,
                               margin: const EdgeInsets.only(right: 10, bottom: 8, top: 4),
