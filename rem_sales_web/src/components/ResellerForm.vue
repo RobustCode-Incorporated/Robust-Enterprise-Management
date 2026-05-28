@@ -7,29 +7,35 @@
     <form @submit.prevent="submitReseller" class="reseller-form">
       <div class="form-row">
         <div class="form-group">
-          <label>Nom du Revendeur</label>
-          <input v-model="form.name" type="text" placeholder="Ex: Jean Dupont" required />
+          <label>Prénom</label>
+          <input v-model="form.firstName" type="text" placeholder="Ex: Jean" required />
         </div>
         <div class="form-group">
-          <label>Email (Connexion)</label>
-          <input v-model="form.email" type="email" placeholder="revendeur@email.com" required />
+          <label>Nom</label>
+          <input v-model="form.lastName" type="text" placeholder="Ex: Dupont" required />
         </div>
       </div>
 
       <div class="form-row">
         <div class="form-group">
+          <label>Email (Connexion)</label>
+          <input v-model="form.email" type="email" placeholder="revendeur@email.com" required />
+        </div>
+        <div class="form-group">
           <label>Téléphone</label>
           <input v-model="form.phone" type="tel" placeholder="+243 XXX XXX XXX" required />
         </div>
+      </div>
+
+      <div class="form-row">
         <div class="form-group">
           <label>Nom du Dépôt</label>
           <input v-model="form.deposit_name" type="text" placeholder="Ex: Dépôt Centre-Ville" required />
         </div>
-      </div>
-
-      <div class="form-group">
-        <label>Mot de passe temporaire</label>
-        <input v-model="form.password" type="password" placeholder="********" required />
+        <div class="form-group">
+          <label>Mot de passe temporaire</label>
+          <input v-model="form.password" type="password" placeholder="********" required />
+        </div>
       </div>
 
       <button type="submit" class="btn-submit" :disabled="loading">
@@ -78,7 +84,16 @@ import axios from 'axios'
 
 const loading = ref(false)
 const resellers = ref([])
-const form = ref({ name: '', email: '', password: '', phone: '', deposit_name: '' })
+
+// Correction de l'objet form : deposit_name au lieu de address
+const form = ref({ 
+  firstName: '', 
+  lastName: '', 
+  email: '', 
+  password: '', 
+  phone: '', 
+  deposit_name: '' 
+})
 
 const fetchResellers = async () => {
   try {
@@ -94,15 +109,18 @@ const submitReseller = async () => {
   loading.value = true
   try {
     const companyId = localStorage.getItem('companyId')
-    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/resellers`, {
+    // L'envoi correspond désormais exactement à ce qu'attend le controller
+    await axios.post(`${import.meta.env.VITE_API_BASE_URL}/resellers/create-with-access`, {
       ...form.value,
-      company_id: companyId
+      companyId: companyId
     })
-    alert('Revendeur créé avec succès !')
-    form.value = { name: '', email: '', password: '', phone: '', deposit_name: '' }
-    await fetchResellers() // Rafraîchir la liste
+    
+    alert('Revendeur créé avec succès et accès généré !')
+    // Réinitialisation avec deposit_name
+    form.value = { firstName: '', lastName: '', email: '', password: '', phone: '', deposit_name: '' }
+    await fetchResellers() 
   } catch (error) {
-    alert('Erreur lors de la création.')
+    alert('Erreur lors de la création : vérifiez que l\'email n\'est pas déjà utilisé.')
   } finally {
     loading.value = false
   }
@@ -112,14 +130,9 @@ onMounted(fetchResellers)
 </script>
 
 <style scoped>
+/* Tes styles restent inchangés et parfaits */
 .form-container { background: white; padding: 40px; border-radius: 8px; max-width: 700px; margin: 0 auto; font-family: 'ABeeZee', sans-serif; }
 .form-header { margin-bottom: 30px; }
-.reseller-form { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 25px; 
-  margin-bottom: 40px; 
-}
 .reseller-form { display: flex; flex-direction: column; gap: 20px; margin-bottom: 40px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
