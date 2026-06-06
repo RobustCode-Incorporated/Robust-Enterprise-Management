@@ -1,52 +1,51 @@
 <template>
   <div class="reconciliation-container">
-    <div class="header-actions">
-      <h2>Suivi des ventes</h2>
-      <button @click="salesStore.fetchSalesDocuments" class="btn-refresh">
-        Actualiser
-      </button>
+    <header class="module-header">
+      <h2>Historique des Ventes & Réconciliation</h2>
+      <p>Consultez les factures générées et le statut des encaissements de l'entreprise.</p>
+    </header>
+
+    <div v-if="salesStore.error" class="error-state">
+      ⚠️ {{ salesStore.error }}
     </div>
 
-    <div class="kpi-grid" v-if="!salesStore.loading">
-      <div v-for="(data, currency) in salesStore.totalsByCurrency" :key="currency" class="kpi-card">
-        <span class="kpi-label">Total encaissé ({{ currency }})</span>
-        <span class="kpi-value">{{ data.paid.toLocaleString() }} {{ currency }}</span>
-      </div>
+    <div v-else-if="salesStore.loading" class="loading-state">
+      Chargement des transactions en cours...
     </div>
 
-    <div class="table-wrapper">
+    <div v-else-if="!salesStore.sales || salesStore.sales.length === 0" class="empty-state">
+      Aucune vente enregistrée pour le moment.
+    </div>
+
+    <div v-else class="table-responsive">
       <table class="sales-table">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Facture</th>
+            <th>Numéro</th>
             <th>Type</th>
-            <th>Total</th>
+            <th>Montant Total</th>
             <th>Statut</th>
+            <th>Date</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="salesStore.loading">
-            <td colspan="5" class="text-center">Chargement des données...</td>
-          </tr>
-
-          <tr v-else-if="salesStore.error">
-            <td colspan="5" class="text-center error-text">{{ salesStore.error }}</td>
-          </tr>
-
-          <tr v-else-if="salesStore.documents.length === 0">
-            <td colspan="5" class="text-center">Aucune donnée disponible.</td>
-          </tr>
-
-          <tr v-for="doc in salesStore.documents" :key="doc.id">
-            <td>{{ formatDate(doc.createdAt) }}</td>
-            <td class="font-mono">{{ doc.number }}</td>
-            <td>{{ doc.type }}</td>
-            <td class="font-bold">{{ doc.totalAmount.toLocaleString() }} {{ doc.currency || 'XOF' }}</td>
+          <tr v-for="sale in salesStore.sales" :key="sale.id">
+            <td class="font-mono font-bold">{{ sale.number || 'N/A' }}</td>
             <td>
-              <span :class="['status-pill', doc.status.toLowerCase()]">
-                {{ doc.status === 'PAID' ? 'Encaissé' : 'En attente' }}
+              <span :class="['badge', typeBadgeClass(sale.type)]">
+                {{ sale.type === 'QUOTE' ? 'Devis' : 'Facture' }}
               </span>
+            </td>
+            <td class="font-bold">
+              {{ formatCurrency(sale.total_amount ?? sale.totalAmount) }}
+            </td>
+            <td>
+              <span :class="['badge', statusBadgeClass(sale.status)]">
+                {{ formatStatus(sale.status) }}
+              </span>
+            </td>
+            <td class="color-muted">
+              {{ formatDate(sale.created_at ?? sale.createdAt) }}
             </td>
           </tr>
         </tbody>
@@ -62,14 +61,59 @@ import { useSalesStore } from '../stores/sales'
 const salesStore = useSalesStore()
 
 onMounted(() => {
-  salesStore.fetchSalesDocuments()
+  // Déclenche l'action nettoyée du store
+  salesStore.fetchSales()
 })
 
-const formatDate = (dateString) => {
-  if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
+// Fonction de formatage monétaire
+const formatCurrency = (value) => {
+  if (value === undefined || value === null) return '0,00'
+  return Number(value).toLocaleString(undefined, { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
   })
+}
+
+// Fonction de formatage de date
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A'
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return dateString
+    return date.toLocaleDateString(undefined, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (e) {
+    return 'N/A'
+  }
+}
+
+const formatStatus = (status) => {
+  const mapping = {
+    'DRAFT': 'Brouillon',
+    'SENT': 'Envoyé',
+    'PAID': 'Payé',
+    'CANCELLED': 'Annulé'
+  }
+  return mapping[status] || status || 'Inconnu'
+}
+
+const typeBadgeClass = (type) => {
+  return type === 'QUOTE' ? 'badge-quote' : 'badge-invoice'
+}
+
+const statusBadgeClass = (status) => {
+  const classes = {
+    'DRAFT': 'badge-draft',
+    'SENT': 'badge-sent',
+    'PAID': 'badge-paid',
+    'CANCELLED': 'badge-cancelled'
+  }
+  return classes[status] || 'badge-default'
 }
 </script>
 
@@ -77,59 +121,54 @@ const formatDate = (dateString) => {
 .reconciliation-container {
   background: #fff;
   padding: 30px;
-  border-radius: 8px;
-  font-family: 'ABeeZee', sans-serif;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-}
-
-.btn-refresh {
-  background: #000;
-  color: #fff;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.kpi-card {
-  background: #f9f9f9;
-  padding: 20px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid #eee;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
 }
 
-.kpi-label { font-size: 0.75rem; color: #666; text-transform: uppercase; font-weight: bold; }
-.kpi-value { display: block; font-size: 1.4rem; font-weight: bold; margin-top: 5px; }
+.module-header { margin-bottom: 25px; }
+.module-header h2 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+.module-header p { color: #666; font-size: 0.9rem; margin-top: 5px; }
 
-.sales-table { width: 100%; border-collapse: collapse; text-align: left; }
-.sales-table th { padding: 15px; border-bottom: 2px solid #eee; color: #666; }
-.sales-table td { padding: 15px; border-bottom: 1px solid #eee; }
+.table-responsive { width: 100%; overflow-x: auto; }
+.sales-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem; }
+.sales-table th { padding: 12px 15px; border-bottom: 2px solid #eee; color: #444; font-weight: 600; }
+.sales-table td { padding: 12px 15px; border-bottom: 1px solid #eee; vertical-align: middle; }
 
-.font-mono { font-family: monospace; font-weight: bold; }
-.font-bold { font-weight: bold; }
-.text-center { text-align: center; padding: 40px; color: #999; }
-.error-text { color: #d32f2f; }
+.font-mono { font-family: monospace; font-size: 0.9rem; }
+.font-bold { font-weight: 600; }
+.color-muted { color: #777; font-size: 0.85rem; }
 
-.status-pill {
-  padding: 5px 12px;
-  border-radius: 20px;
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-quote { background: #e3f2fd; color: #0d47a1; }
+.badge-invoice { background: #f3e5f5; color: #4a148c; }
+.badge-draft { background: #f5f5f5; color: #616161; }
+.badge-sent { background: #fff3e0; color: #e65100; }
+.badge-paid { background: #e8f5e9; color: #1b5e20; }
+.badge-cancelled { background: #ffebee; color: #b71c1c; }
+.badge-default { background: #eee; color: #333; }
+
+.loading-state, .empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-style: italic;
+}
+
+.error-state {
+  text-align: center;
+  padding: 20px;
+  background: #ffebee;
+  color: #c62828;
+  border-radius: 6px;
+  margin-bottom: 20px;
   font-weight: bold;
 }
-.status-pill.paid { background: #e8f5e9; color: #2e7d32; }
-.status-pill.draft { background: #fff3e0; color: #ef6c00; }
 </style>

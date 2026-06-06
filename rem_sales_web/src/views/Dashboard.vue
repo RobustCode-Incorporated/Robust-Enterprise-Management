@@ -35,12 +35,14 @@ import SalesReconciliation from '../components/SalesReconciliation.vue'
 import InventoryAlerts from '../components/InventoryAlerts.vue'
 import ProductForm from '../components/ProductForm.vue'
 import ResellerForm from '../components/ResellerForm.vue'
+import AnalyticsDashboard from '../components/AnalyticsDashboard.vue'
 
 const router = useRouter()
 const currentTab = ref('dashboard')
 
 const menuItems = [
-  { id: 'dashboard', label: 'Tableau de bord' },
+  { id: 'dashboard', label: 'Statistiques' }, // Devient la vue Analytics
+  { id: 'pos', label: 'Vente Rapide' },       // L'ancien SalesReconciliation
   { id: 'inventory', label: 'Suivi Stocks' },
   { id: 'products', label: 'Articles' },
   { id: 'Resellers', label: 'Revendeurs'}
@@ -48,7 +50,8 @@ const menuItems = [
 
 const activeComponent = computed(() => {
   const components = {
-    dashboard: SalesReconciliation,
+    dashboard: AnalyticsDashboard, // Liaison au nouveau composant
+    pos: SalesReconciliation,      // Liaison à ton module de vente actuel
     inventory: InventoryAlerts,
     products: ProductForm,
     Resellers: ResellerForm

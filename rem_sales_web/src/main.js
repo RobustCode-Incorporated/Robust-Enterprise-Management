@@ -1,11 +1,13 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import VueApexCharts from "vue3-apexcharts" // 💡 Importation de la bibliothèque graphique
 import App from './App.vue'
-import router from './router' // Importe bien le dossier router (qui contient ton index.js)
+import router from './router' 
 
 const app = createApp(App)
 
 app.use(createPinia())
-app.use(router) // 👈 C'EST CETTE LIGNE QUI MANQUE OU QUI EST MAL PLACÉE
+app.use(router) 
+app.use(VueApexCharts) // 💡 Enregistrement global pour pouvoir utiliser <apexchart> partout
 
 app.mount('#app')

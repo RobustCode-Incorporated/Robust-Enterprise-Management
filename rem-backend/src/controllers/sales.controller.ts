@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import pino from 'pino';
-import { SalesModel } from '../models/sales.model';
 
 const logger = pino({ transport: { target: 'pino-pretty' } });
 
@@ -9,39 +8,41 @@ const logger = pino({ transport: { target: 'pino-pretty' } });
 // 1. CRÉATION DE DOCUMENTS COMMERCIAUX
 // ==========================================
 export const createSalesDocument = async (req: Request, res: Response): Promise<void> => {
-  const { clientId, type, items } = req.body;
-  const companyId = (req as any).user?.companyId;
+  const { clientId, type, items, status, company_id } = req.body;
+  const companyId = company_id || req.body.companyId || (req as any).user?.companyId;
 
   logger.info({ companyId, clientId, type }, '[REM SALES] Tentative de génération de pièce commerciale');
+
+  if (!companyId || companyId === 'bf30cd12-9c1d-4074-b4a0-000000000000') {
+    res.status(400).json({ error: 'Le paramètre company_id est obligatoire ou invalide.' });
+    return;
+  }
 
   try {
     let totalAmount = 0;
     const computedItems = items.map((item: any) => {
-      // Sécurité : Supporte à la fois camelCase (mobile) et snake_case
-      const unitPrice = item.unitPrice !== undefined ? item.unitPrice : item.unit_price;
+      const unitPrice = item.unitPrice !== undefined ? item.unitPrice : (item.unit_price || 0);
       const quantity = item.quantity || 1;
-      
       const lineTotal = quantity * unitPrice;
       totalAmount += lineTotal;
-      
       return { ...item, quantity, unitPrice, lineTotal };
     });
 
     const timestamp = Date.now();
-    const docNumber = `${type === 'QUOTE' ? 'DEVIS' : 'FACT'}-${timestamp}`;
+    const docNumber = `${type === 'QUOTE' ? 'DEVIS' : 'FACT'}-${timestamp.toString().slice(-6)}`;
+
+    await db.query('BEGIN');
 
     const docQuery = `
       INSERT INTO documents (company_id, client_id, type, number, status, total_amount)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id, number, type, status, total_amount, created_at;
     `;
-    const docValues = [companyId, clientId, type, docNumber, 'DRAFT', totalAmount];
+    const docValues = [companyId, clientId || null, type || 'INVOICE', docNumber, status || 'DRAFT', totalAmount];
     const docResult = await db.query(docQuery, docValues);
     const newDocument = docResult.rows[0];
 
     for (const item of computedItems) {
-      // 🛡️ CORRECTION CHIRURGICALE : Si le product_id est générique/fictif, on passe NULL 
-      // pour éviter la violation de clé étrangère PostgreSQL (Constraint 23503)
       const rawProductId = item.productId || item.product_id;
       const finalProductId = (rawProductId === '00000000-0000-0000-0000-000000000000' || !rawProductId)
         ? null 
@@ -58,9 +59,20 @@ export const createSalesDocument = async (req: Request, res: Response): Promise<
         item.unitPrice, 
         item.lineTotal
       ]);
+
+      if ((status === 'PAID' || newDocument.status === 'PAID') && finalProductId) {
+        const updateStockQuery = `
+          UPDATE products 
+          SET stock_quantity = stock_quantity - $1 
+          WHERE id = $2 AND company_id = $3;
+        `;
+        await db.query(updateStockQuery, [item.quantity, finalProductId, companyId]);
+        logger.info({ finalProductId, qty: item.quantity }, '[REM STOCK] Déduction de stock effectuée');
+      }
     }
 
-    logger.info({ documentId: newDocument.id, number: docNumber }, '[REM SALES SUCCESS] Document et lignes enregistrés');
+    await db.query('COMMIT');
+    logger.info({ documentId: newDocument.id, number: docNumber }, '[REM SALES SUCCESS] Document enregistré et stock ajusté.');
 
     res.status(201).json({
       message: 'Document commercial créé avec succès',
@@ -68,39 +80,45 @@ export const createSalesDocument = async (req: Request, res: Response): Promise<
       items: computedItems
     });
   } catch (error) {
+    await db.query('ROLLBACK');
     logger.error(error, '[REM SALES ERROR] Échec de la transaction commerciale');
     res.status(500).json({ error: 'Erreur fatale lors de la création du document commercial.' });
   }
 };
 
 // ==========================================
-// 2. NOUVEAU TICKET : CRÉATION DE CLIENTS (REM-204)
+// 2. CRÉATION DE CLIENTS - AVEC ADRESSE (REM-204)
 // ==========================================
 export const createClient = async (req: Request, res: Response): Promise<void> => {
-  const { name, email, phone } = req.body;
-  const companyId = (req as any).user?.companyId;
+  // 📦 Extraction complète incluant désormais 'address'
+  const { name, email, phone, address, company_id } = req.body;
+  const companyId = company_id || (req as any).user?.companyId;
 
-  logger.info({ companyId, name, email }, '[REM CLIENTS] Tentative de création de client');
+  logger.info({ companyId, name, email }, '[REM CLIENTS] Tentative de création de client avec données complètes');
 
-  // Validation défensive d'entrée
   if (!name || name.trim() === '') {
     res.status(400).json({ error: 'Le nom du client est obligatoire.' });
     return;
   }
 
+  if (!companyId || companyId === 'bf30cd12-9c1d-4074-b4a0-000000000000') {
+     res.status(400).json({ error: 'ID entreprise manquant ou invalide.' });
+     return;
+  }
+
   try {
-    // Insertion SQL sécurisée avec multi-tenant. 
+    // Requête ajustée pour écrire dans la colonne address
     const clientQuery = `
-      INSERT INTO clients (company_id, name, email, phone, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      RETURNING id, company_id, name, email, phone, created_at;
+      INSERT INTO clients (company_id, name, email, phone, address, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING id, company_id, name, email, phone, address, created_at;
     `;
     
-    const clientValues = [companyId, name, email || null, phone || null];
+    const clientValues = [companyId, name, email || null, phone || null, address || null];
     const result = await db.query(clientQuery, clientValues);
     const newClient = result.rows[0];
 
-    logger.info({ clientId: newClient.id, name: newClient.name }, '[REM CLIENTS SUCCESS] Client créé avec succès');
+    logger.info({ clientId: newClient.id, name: newClient.name }, '[REM CLIENTS SUCCESS] Profil complet du client créé en base.');
 
     res.status(201).json({
       message: 'Client créé avec succès',
@@ -109,7 +127,6 @@ export const createClient = async (req: Request, res: Response): Promise<void> =
   } catch (error: any) {
     logger.error(error, '[REM CLIENTS ERROR] Échec de la création du client');
     
-    // Gestion propre des doublons de contraintes si email unique par exemple
     if (error.code === '23505') {
        res.status(409).json({ error: 'Un client avec cet identifiant ou email existe déjà.' });
        return;
@@ -129,7 +146,6 @@ export const updateDocumentStatus = async (req: Request, res: Response): Promise
 
   logger.info({ documentId: id, status, companyId }, '[REM SALES] Tentative de mise à jour du statut');
 
-  // Validation des statuts autorisés
   const allowedStatuses = ['DRAFT', 'SENT', 'PAID', 'CANCELLED'];
   if (!allowedStatuses.includes(status)) {
      res.status(400).json({ error: `Statut invalide. Choisir parmi : ${allowedStatuses.join(', ')}` });
@@ -137,7 +153,6 @@ export const updateDocumentStatus = async (req: Request, res: Response): Promise
   }
 
   try {
-    // Requête SQL multi-tenant pour sécuriser la modification
     const query = `
       UPDATE documents 
       SET status = $1, updated_at = NOW()
@@ -163,11 +178,12 @@ export const updateDocumentStatus = async (req: Request, res: Response): Promise
     res.status(500).json({ error: 'Erreur fatale lors de la modification du statut.' });
   }
 };
+
 // ==========================================
-// 4. SYNCHRONISATION OFFLINE-FIRST (MOBILE) - FIXED
+// 4. SYNCHRONISATION OFFLINE-FIRST (MOBILE)
 // ==========================================
 export const syncOfflineDocument = async (req: Request, res: Response): Promise<void> => {
-  const { id, type, number, status, totalAmount, items } = req.body; // 📦 Récupération des items
+  const { id, type, number, status, totalAmount, items } = req.body;
   const companyId = (req as any).user?.companyId;
 
   logger.info({ companyId, documentId: id, number }, '[REM SALES SYNC] Réception d\'un document et de ses articles');
@@ -178,7 +194,6 @@ export const syncOfflineDocument = async (req: Request, res: Response): Promise<
   }
 
   try {
-    // Appel du modèle mis à jour qui exécute la transaction globale ACID
     await SalesModel.syncMobileDocument({
       id,
       companyId,

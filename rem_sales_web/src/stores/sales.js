@@ -1,74 +1,43 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
 
-/**
- * SALES STORE
- * Gestion des documents commerciaux et réconciliation financière.
- */
 export const useSalesStore = defineStore('sales', {
   state: () => ({
-    documents: [], 
+    sales: [],
     loading: false,
     error: null
   }),
 
-  getters: {
-    /**
-     * Réconciliation financière en temps réel.
-     * Analyse des totaux par devise.
-     */
-    totalsByCurrency: (state) => {
-      if (!Array.isArray(state.documents)) return {}
-
-      return state.documents.reduce((acc, doc) => {
-        const currency = doc.currency || 'XOF'
-        const amount = parseFloat(doc.total_amount || doc.totalAmount || 0)
-
-        if (!acc[currency]) {
-          acc[currency] = { total: 0, count: 0, paid: 0, draft: 0 }
-        }
-
-        acc[currency].total += amount
-        acc[currency].count += 1
-        
-        if (doc.status === 'PAID') acc[currency].paid += amount
-        else if (doc.status === 'DRAFT') acc[currency].draft += amount
-
-        return acc
-      }, {})
-    }
-  },
-
   actions: {
-    /**
-     * Récupération des données multi-tenant.
-     * Utilisation de l'ID entreprise et du jeton d'authentification.
-     */
-    async fetchSalesDocuments() {
+    async fetchSales() {
       this.loading = true
       this.error = null
-      
       try {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL
-        const companyId = localStorage.getItem('companyId')
         const token = localStorage.getItem('token')
+        const companyId = localStorage.getItem('companyId')
 
-        if (!companyId || !token) {
-          throw new Error("Authentification invalide : Données manquantes.")
-        }
-
-        const response = await axios.get(`${baseUrl}/sales`, {
+        // Appel à ton API avec le token et le company_id requis
+        const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/sales`, {
           params: { company_id: companyId },
           headers: { Authorization: `Bearer ${token}` }
         })
 
-        const rawData = response.data
-        this.documents = Array.isArray(rawData) ? rawData : (rawData?.documents || [])
+        // 🛡️ ADAPTATION ULTRA-SOUPLE DE LA RÉPONSE :
+        // On vérifie toutes les structures possibles que ton backend peut renvoyer
+        if (Array.isArray(response.data)) {
+          this.sales = response.data
+        } else if (response.data && Array.isArray(response.data.documents)) {
+          this.sales = response.data.documents
+        } else if (response.data && Array.isArray(response.data.sales)) {
+          this.sales = response.data.sales
+        } else {
+          this.sales = []
+        }
 
+        console.log("Ventes chargées dans le store Pinia :", this.sales)
       } catch (err) {
-        console.error('Sales Store Error:', err)
-        this.error = err.response?.data?.message || "Impossible de synchroniser les ventes."
-        this.documents = [] 
+        console.error("Erreur lors de la récupération des ventes dans le store :", err)
+        this.error = err.message || "Impossible de charger les ventes."
       } finally {
         this.loading = false
       }

@@ -1,77 +1,130 @@
 <template>
-  <div class="reseller-portal">
-    <header class="portal-header">
-      <h2>Mon Espace Revendeur</h2>
-      <p>Gérez votre dépôt et validez votre position.</p>
+  <div class="dashboard-container">
+    <header class="top-navbar">
+      <div class="brand-zone">
+        <img src="../assets/RobustCodelogowhite.png" alt="Logo REM" class="logo-top" />
+        <h1 class="brand-title">ROBUST ENTERPRISE MANAGEMENT</h1>
+      </div>
+
+      <div class="nav-right">
+        <nav class="nav-menu">
+          <button v-for="link in menuItems" :key="link.id" 
+                  :class="['nav-item', { active: currentTab === link.id }]"
+                  @click="currentTab = link.id">
+            {{ link.label }}
+          </button>
+        </nav>
+        <button @click="logout" class="logout-btn">Déconnexion</button>
+      </div>
     </header>
 
-    <div class="action-card">
-      <h3>Géolocalisation</h3>
-      <p>Cliquez pour mettre à jour votre position actuelle sur la carte du réseau.</p>
-      
-      <button @click="updateLocation" :disabled="loading" class="btn-geo">
-        {{ loading ? 'Localisation en cours...' : 'Mettre à jour ma position GPS' }}
-      </button>
-
-      <div v-if="statusMessage" :class="['status-msg', statusType]">
-        {{ statusMessage }}
-      </div>
-    </div>
+    <main class="content-area">
+      <section class="content-body">
+        <component :is="activeComponent" />
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import axios from 'axios'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
-const loading = ref(false)
-const statusMessage = ref('')
-const statusType = ref('')
+// Importation des modules
+import DashboardModule from '../components/DashboardModule.vue'
+import GeolocationModule from '../components/GeolocationModule.vue'
+import StockModule from '../components/StockModule.vue' 
+import OrderModule from '../components/OrderModule.vue'
+import SalesReconciliation from '../components/SalesReconciliation.vue'
 
-const updateLocation = () => {
-  if (!navigator.geolocation) {
-    statusMessage.value = "La géolocalisation n'est pas supportée par votre navigateur."
-    statusType.value = 'error'
-    return
+const router = useRouter()
+const currentTab = ref('dashboard') // <-- Modifié ici pour démarrer sur le dashboard
+
+const menuItems = [
+  { id: 'dashboard', label: 'Vente Rapide' },
+  { id: 'geo', label: 'Géolocalisation' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'history', label: 'Mes Ventes' } // Nouveau label
+]
+
+const activeComponent = computed(() => {
+  const components = {
+    dashboard: DashboardModule,
+    geo: GeolocationModule,
+    stock: StockModule,
+    history: SalesReconciliation // Lier l'ID au composant
   }
+  return components[currentTab.value]
+})
 
-  loading.value = true
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      try {
-        const { latitude, longitude } = position.coords
-        const resellerId = localStorage.getItem('resellerId') // Assure-toi de stocker cet ID au login
-        
-        await axios.patch(`${import.meta.env.VITE_API_BASE_URL}/resellers/${resellerId}/location`, {
-          latitude,
-          longitude
-        })
-        
-        statusMessage.value = "Position mise à jour avec succès !"
-        statusType.value = 'success'
-      } catch (err) {
-        statusMessage.value = "Erreur lors de l'envoi au serveur."
-        statusType.value = 'error'
-      } finally {
-        loading.value = false
-      }
-    },
-    () => {
-      statusMessage.value = "Impossible d'obtenir votre position."
-      statusType.value = 'error'
-      loading.value = false
-    }
-  )
+const logout = () => {
+  localStorage.clear()
+  router.push('/login')
 }
 </script>
 
 <style scoped>
-.reseller-portal { padding: 20px; font-family: 'ABeeZee', sans-serif; max-width: 500px; margin: 0 auto; }
-.portal-header { margin-bottom: 30px; }
-.action-card { background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #eee; text-align: center; }
-.btn-geo { background: #000; color: #fff; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; }
-.btn-geo:disabled { background: #555; }
-.status-msg { margin-top: 15px; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
-.success { background: #e8f5e9; color: #2e7d32; }
-.error { background: #ffebee; color: #c62828; }
+.dashboard-container { 
+  display: flex; 
+  flex-direction: column; 
+  height: 100vh; 
+  background: #FFFAFA; 
+  font-family: 'ABeeZee', sans-serif; 
+}
+
+.top-navbar {
+  background: #000;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 40px;
+}
+
+.brand-zone { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+}
+
+.logo-top { 
+  width: 140px; 
+  height: auto; 
+  margin-bottom: 2px; 
+}
+
+.brand-title { 
+  color: #FFFAFA; 
+  font-size: 0.65rem; 
+  letter-spacing: 1.5px; 
+  font-weight: 400; 
+  white-space: nowrap;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.nav-right { display: flex; align-items: center; gap: 25px; }
+.nav-menu { display: flex; gap: 20px; }
+.nav-item {
+  background: transparent;
+  color: #A0A0A0;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: 0.2s;
+}
+.nav-item:hover, .nav-item.active { color: #fff; }
+
+.logout-btn { 
+  background: transparent; 
+  color: #fff; 
+  border: 1px solid #333; 
+  padding: 6px 14px; 
+  border-radius: 20px; 
+  font-size: 0.75rem;
+  cursor: pointer; 
+  transition: 0.3s;
+}
+.logout-btn:hover { background: #fff; color: #000; }
+
+.content-area { flex: 1; padding: 30px 50px; overflow-y: auto; }
 </style>
