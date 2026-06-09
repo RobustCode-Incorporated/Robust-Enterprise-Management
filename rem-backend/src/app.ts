@@ -25,7 +25,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.use('/api/sales', salesRouter);
+// Aiguillage des modules applicatifs
+app.use('/api/sales', salesRouter); // Le point d'entrée inclut maintenant /resellers-location
 app.use('/api/auth', authRouter);
 app.use('/api/resellers', resellerRouter); 
 

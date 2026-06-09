@@ -89,8 +89,8 @@
 
         <div class="invoice-paper">
           <div class="invoice-header">
-            <div>
-              <h1 class="company-logo">ROBUST CODE INC.</h1>
+            <div class="logo-container">
+              <img :src="logoRobustCode" alt="Robust Code Inc. Logo" class="invoice-logo-img" />
               <p class="company-details">Solutions Technologiques Multi-tenant<br>Bruxelles, Belgique</p>
             </div>
             <div class="invoice-meta-block">
@@ -155,6 +155,9 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 
+// 💡 Importation officielle de ton logo via Vite
+import logoRobustCode from '../assets/RobustCodelogowhite.png'
+
 // États réactifs existants
 const salesList = ref([])
 const metaData = ref(null)
@@ -164,7 +167,7 @@ const selectedStatus = ref('')
 const loading = ref(false)
 let debounceTimeout = null
 
-// Nouveaux états pour la gestion de la modale
+// États pour la gestion de la modale
 const isModalOpen = ref(false)
 const selectedInvoice = ref(null)
 
@@ -227,7 +230,7 @@ const formatDate = (dateString) => {
   })
 }
 
-// Logique métier de la modale de facturation
+// Logique de la modale
 const openInvoice = (sale) => {
   selectedInvoice.value = sale
   isModalOpen.value = true
@@ -239,10 +242,10 @@ const closeModal = () => {
 }
 
 const printInvoice = () => {
-  window.print() // Déclenche instantanément la boîte de dialogue système d'impression/Sauvegarde PDF
+  window.print()
 }
 
-// Génération dynamique de liens de partage omnicanal (Deep Linking)
+// Liens omnicanaux
 const whatsappLink = computed(() => {
   if (!selectedInvoice.value) return '#'
   const text = encodeURIComponent(
@@ -266,14 +269,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Styles structurels existants */
-.sales-module-container {
-  background: #fff;
-  padding: 24px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
+/* Styles structurels du Dashboard */
+.sales-module-container { background: #fff; padding: 24px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .filter-zone { border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
 .filter-zone legend { font-size: 0.8rem; font-weight: bold; text-transform: uppercase; padding: 0 8px; }
 .filter-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
@@ -302,126 +299,60 @@ onMounted(() => {
 .pag-btn:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
 .page-indicator { font-size: 0.85rem; color: #334155; }
 
-/* ========================================================================= */
-/* CSS RECRUTÉ POUR LA MODALE DE RENDU & DESIGN PAPIER FACTURE              */
-/* ========================================================================= */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(15, 23, 42, 0.6); /* Fond sombre flouté pro */
-  backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
+/* Modale Overlay */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+.modal-content { background: #f8fafc; width: 90%; max-width: 800px; max-height: 90vh; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; overflow: hidden; }
 
-.modal-content {
-  background: #f8fafc;
-  width: 90%;
-  max-width: 800px;
-  max-height: 90vh;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Actions en haut de la modale */
-.modal-actions-bar {
-  background: #1e293b;
-  padding: 12px 24px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-.modal-actions-bar button, .modal-actions-bar a {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-  border: none;
-  transition: opacity 0.2s;
-}
-.modal-actions-bar button:hover, .modal-actions-bar a:hover { opacity: 0.9; }
+/* Actions Bar */
+.modal-actions-bar { background: #1e293b; padding: 12px 24px; display: flex; gap: 12px; align-items: center; }
+.modal-actions-bar button, .modal-actions-bar a { padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; text-decoration: none; cursor: pointer; border: none; }
 .btn-action-print { background: #3b82f6; color: white; }
 .btn-action-whatsapp { background: #22c55e; color: white; }
 .btn-action-email { background: #64748b; color: white; }
 .btn-action-close { background: #ef4444; color: white; margin-left: auto; }
 
-/* Rendu papier A4 Facture */
-.invoice-paper {
-  background: #ffffff;
-  padding: 40px;
-  overflow-y: auto;
-  flex: 1;
-  color: #1e293b;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+/* Zone Papier Facture & Intégration du Logo */
+.invoice-paper { background: #ffffff; padding: 40px; overflow-y: auto; flex: 1; color: #1e293b; font-family: 'Segoe UI', system-ui, sans-serif; }
 .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.company-logo { font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; letter-spacing: -0.5px; }
+
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invoice-logo-img {
+  max-width: 180px;
+  height: auto;
+  object-fit: contain;
+  filter: brightness(0) contrast(100%); 
+}
+
 .company-details { font-size: 0.85rem; color: #64748b; line-height: 1.4; margin: 0; }
 .invoice-meta-block { text-align: right; }
 .invoice-meta-block h2 { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 8px 0; }
 .invoice-meta-block p { margin: 4px 0; font-size: 0.9rem; color: #475569; }
 .invoice-status-text { font-weight: bold; color: #22c55e; }
-
 .invoice-separator { border: 0; border-top: 2px solid #f1f5f9; margin: 24px 0; }
-
 .invoice-bill-to h3 { font-size: 0.85rem; text-transform: uppercase; color: #64748b; margin-bottom: 8px; letter-spacing: 0.5px; }
 .client-name { font-size: 1.1rem; font-weight: 700; margin: 0 0 4px 0; color: #0f172a; }
 .client-details { font-size: 0.85rem; color: #64748b; margin: 0; }
-
 .invoice-items-table { width: 100%; border-collapse: collapse; margin-top: 32px; }
-.invoice-items-table th { background: #f8fafc; padding: 10px 12px; font-size: 0.8rem; text-transform: uppercase; color: #64748b; font-weight: 600; border-bottom: 1px solid #cbd5e1; }
+.invoice-items-table th { background: #f8fafc; padding: 10px 12px; font-size: 0.8rem; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #cbd5e1; }
 .invoice-items-table td { padding: 16px 12px; font-size: 0.95rem; border-bottom: 1px solid #f1f5f9; }
-
 .invoice-total-block { width: 40%; margin-left: auto; margin-top: 24px; display: flex; flex-direction: column; gap: 8px; }
 .total-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: #475569; }
 .grand-total { font-size: 1.1rem; font-weight: 800; color: #0f172a; border-top: 2px solid #0f172a; padding-top: 8px; margin-top: 4px; }
-
 .invoice-footer { margin-top: 60px; text-align: center; color: #94a3b8; }
 .invoice-footer p { margin: 4px 0; font-size: 0.9rem; }
 .footer-legal { font-size: 0.75rem !important; margin-top: 12px !important; }
 
-/* ========================================================================= */
-/* BALISES ET COMPORTEMENTS SÉCIFIQUES POUR L'IMPRESSION SYSTÈME (PRINT CSS) */
-/* ========================================================================= */
+/* Impression CSS */
 @media print {
-  /* Masquage de TOUTE l'interface Web globale inutile pour une version papier */
-  .no-print, .no-print * {
-    display: none !important;
-  }
-  
-  /* Configuration de la modale pour qu'elle prenne la totalité de la page physique */
-  .modal-overlay {
-    position: absolute !important;
-    background: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    top: 0 !important;
-    left: 0 !important;
-  }
-  .modal-content {
-    box-shadow: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    max-height: 100% !important;
-    background: transparent !important;
-  }
-  .invoice-paper {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-  }
+  .no-print, .no-print * { display: none !important; }
+  .modal-overlay { position: absolute !important; background: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; }
+  .modal-content { box-shadow: none !important; width: 100% !important; max-width: 100% !important; background: transparent !important; }
+  .invoice-paper { padding: 0 !important; margin: 0 !important; width: 100% !important; }
+  .invoice-logo-img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>
