@@ -378,7 +378,9 @@ export const syncOfflineDocument = async (req: Request, res: Response): Promise<
 // ==========================================
 export const getSalesDocuments = async (req: Request, res: Response): Promise<void> => {
   try {
-    const companyId = req.query.company_id || (req as any).user?.companyId;
+    const user = (req as any).user; // Récupération de l'utilisateur connecté depuis le middleware
+    const companyId = req.query.company_id || user?.companyId;
+
     if (!companyId) {
       res.status(400).json({ success: false, error: "Missing company identity" });
       return;
@@ -390,10 +392,20 @@ export const getSalesDocuments = async (req: Request, res: Response): Promise<vo
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || '';
 
+    // 1. Condition de base : l'entreprise
     let queryConditions = 'WHERE d.company_id = $1';
     const queryParams: any[] = [companyId];
     let paramIndex = 2;
 
+    // 2. ISOLATION CRITIQUE : Si c'est un revendeur, on force le filtrage par son ID
+    if (user?.role === 'STAFF') {
+      queryConditions += ` AND d.reseller_id = $${paramIndex}`;
+      queryParams.push(user.id);
+      paramIndex++;
+      logger.info({ userId: user.id }, "[REM SECURITY] Filtrage strict par revendeur appliqué.");
+    }
+
+    // 3. Autres filtres (Status, Recherche)
     if (status) {
       queryConditions += ` AND d.status = $${paramIndex}`;
       queryParams.push(status);
@@ -401,7 +413,7 @@ export const getSalesDocuments = async (req: Request, res: Response): Promise<vo
     }
 
     if (search) {
-      queryConditions += ` AND (d.number ILIKE $${paramIndex} OR c.name ILIKE $${paramIndex} OR r.name ILIKE $${paramIndex})`;
+      queryConditions += ` AND (d.number ILIKE $${paramIndex} OR c.name ILIKE $${paramIndex})`;
       queryParams.push(`%${search}%`);
       paramIndex++;
     }
@@ -412,12 +424,14 @@ export const getSalesDocuments = async (req: Request, res: Response): Promise<vo
       FROM documents d
       LEFT JOIN clients c ON d.client_id = c.id
       LEFT JOIN public.resellers r ON d.reseller_id = r.id
-      ${queryConditions} ORDER BY d.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
+      ${queryConditions} 
+      ORDER BY d.created_at DESC 
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
     `;
 
     const [dataResult, countResult] = await Promise.all([
       db.query(dataQuery, [...queryParams, limit, offset]),
-      db.query(`SELECT COUNT(*) FROM documents d LEFT JOIN clients c ON d.client_id = c.id LEFT JOIN public.resellers r ON d.reseller_id = r.id ${queryConditions};`, queryParams)
+      db.query(`SELECT COUNT(*) FROM documents d ${queryConditions};`, queryParams)
     ]);
 
     const totalItems = parseInt(countResult.rows[0].count) || 0;
@@ -427,6 +441,7 @@ export const getSalesDocuments = async (req: Request, res: Response): Promise<vo
       meta: { totalItems, totalPages: Math.ceil(totalItems / limit), currentPage: page, limit }
     });
   } catch (error) {
+    logger.error(error, '[REM GET DOCUMENTS ERROR]');
     res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
