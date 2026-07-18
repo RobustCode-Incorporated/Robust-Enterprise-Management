@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/', redirect: '/login' }, 
     { path: '/login', component: Login },
     { path: '/register', component: () => import('../views/RegisterCompany.vue') },
+    { path: '/confidentiality-agreement', component: () => import('../views/ConfidentialityAgreement.vue') },
     { path: '/reseller-dashboard', component: ResellerDashboard },
     { 
       path: '/dashboard', 

@@ -35,6 +35,17 @@
           <label>Mot de passe</label>
           <input v-model="form.password" type="password" placeholder="••••••••" required />
 
+          <div class="consent-block">
+            <label class="consent-label">
+              <input v-model="form.acceptedConfidentialityAgreement" type="checkbox" />
+              <span>
+                Je déclare avoir lu et accepté l'
+                <router-link to="/confidentiality-agreement" target="_blank">Engagement de confidentialité PME</router-link>
+                et j'autorise le traitement des informations strictement nécessaires à mon immatriculation.
+              </span>
+            </label>
+          </div>
+
           <div v-if="error" class="error-msg">{{ error }}</div>
 
           <button type="submit" :disabled="loading">
@@ -66,10 +77,16 @@ const form = reactive({
   firstName: '',
   lastName: '',
   email: '',
-  password: ''
+  password: '',
+  acceptedConfidentialityAgreement: false
 })
 
 const handleRegister = async () => {
+  if (!form.acceptedConfidentialityAgreement) {
+    error.value = "Vous devez accepter l'engagement de confidentialité pour continuer."
+    return
+  }
+
   loading.value = true
   error.value = ''
   try {
@@ -133,6 +150,10 @@ const handleRegister = async () => {
 
 .name-row { display: flex; gap: 15px; }
 .input-half { flex: 1; }
+.consent-block { margin-bottom: 15px; }
+.consent-label { display: flex; align-items: flex-start; gap: 10px; font-size: 0.85rem; color: #333; line-height: 1.45; }
+.consent-label input { width: 16px; height: 16px; margin-top: 2px; margin-bottom: 0; }
+.consent-label a { color: #000; font-weight: 700; }
 
 .login-form button { 
   width: 100%; background-color: #000; color: #fff; padding: 15px; 

@@ -11,7 +11,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'SuperSecretKeyREM2026!';
 
 // --- LOGIQUE INITIALE : ENREGISTREMENT ADMIN ---
 export const registerCompanyAndUser = async (req: Request, res: Response): Promise<void> => {
-  const { companyName, country, firstName, lastName, email, password } = req.body;
+  const { companyName, country, firstName, lastName, email, password, acceptedConfidentialityAgreement } = req.body;
+
+  if (acceptedConfidentialityAgreement !== true) {
+    res.status(400).json({ error: "L'acceptation de l'engagement de confidentialité est obligatoire." });
+    return;
+  }
   
   logger.info({ email }, '[AUTH] Tentative d inscription pour : ' + companyName);
 
