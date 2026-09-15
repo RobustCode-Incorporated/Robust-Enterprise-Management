@@ -48,6 +48,37 @@
         </div>
         <p v-if="routeMessage" class="gev-tool-message">{{ routeMessage }}</p>
       </div>
+
+      <div class="gev-tool-box">
+        <label class="gev-tool-label">🗺️ Trajet entre deux adresses</label>
+        <div class="gev-tool-inline">
+          <input
+            v-model="addressFromQuery"
+            @keydown.enter="computeAddressRoute"
+            type="text"
+            placeholder="Adresse de départ"
+            class="gev-tool-input"
+          />
+        </div>
+        <div class="gev-tool-inline">
+          <input
+            v-model="addressToQuery"
+            @keydown.enter="computeAddressRoute"
+            type="text"
+            placeholder="Adresse d'arrivée"
+            class="gev-tool-input"
+          />
+          <select v-model="addressRouteMode" class="gev-tool-select gev-tool-select-mode">
+            <option value="car">🚗</option>
+            <option value="bike">🚲</option>
+            <option value="foot">🚶</option>
+          </select>
+          <button @click="computeAddressRoute" :disabled="addressRouteComputing" class="gev-tool-btn">
+            {{ addressRouteComputing ? '...' : 'Calculer' }}
+          </button>
+        </div>
+        <p v-if="addressRouteMessage" class="gev-tool-message">{{ addressRouteMessage }}</p>
+      </div>
     </div>
 
     <div ref="containerEl" class="gev-globe-canvas"></div>
@@ -89,6 +120,14 @@ const routeToId = ref('');
 const routeMode = ref('car');
 const routeComputing = ref(false);
 const routeMessage = ref('');
+
+// Trajet entre deux adresses libres (départ/arrivée tapées au clavier, pas
+// forcément des revendeurs connus — ex: une nouvelle adresse de livraison)
+const addressFromQuery = ref('');
+const addressToQuery = ref('');
+const addressRouteMode = ref('car');
+const addressRouteComputing = ref(false);
+const addressRouteMessage = ref('');
 
 let app = null;
 let pollInterval = null;
@@ -231,6 +270,34 @@ const searchAddress = async () => {
   }
 };
 
+// Calcule et dessine un itinéraire entre 2 points déjà résolus (lat/lon connues),
+// et renvoie un message prêt à afficher. Partagé par computeRoute (revendeurs)
+// et computeAddressRoute (adresses libres) : seule la résolution des points diffère.
+async function runRoute({ fromPoint, toPoint, fromLabel, toLabel, mode }) {
+  const { annotations } = app.getComponents().tools;
+  const result = await annotations.annotate(
+    [
+      {
+        type: 'route',
+        mode,
+        label: `${fromLabel} → ${toLabel}`,
+        points: [
+          { latitude: fromPoint.lat, longitude: fromPoint.lng },
+          { latitude: toPoint.lat, longitude: toPoint.lng },
+        ],
+      },
+    ],
+    { flyTo: true },
+  );
+  const leg = result.results?.[0];
+  if (!leg?.ok) return "Impossible de calculer l'itinéraire.";
+  const km = (leg.distanceM / 1000).toFixed(1);
+  const minutes = Number.isFinite(leg.durationS) ? Math.round(leg.durationS / 60) : null;
+  return leg.fallback
+    ? `⚠️ Itinéraire indisponible — ligne directe : ${km} km`
+    : `${km} km${minutes ? ` · ~${minutes} min` : ''} (${mode})`;
+}
+
 const computeRoute = async () => {
   if (!app || !placeSearch) return;
   const from = resellersList.value.find((r) => r.id === routeFromId.value);
@@ -243,36 +310,57 @@ const computeRoute = async () => {
   routeComputing.value = true;
   routeMessage.value = '';
   try {
-    const { annotations } = app.getComponents().tools;
-    const result = await annotations.annotate(
-      [
-        {
-          type: 'route',
-          mode: routeMode.value,
-          label: `${from.name} → ${to.name}`,
-          points: [
-            { latitude: parseFloat(from.latitude), longitude: parseFloat(from.longitude) },
-            { latitude: parseFloat(to.latitude), longitude: parseFloat(to.longitude) },
-          ],
-        },
-      ],
-      { flyTo: true },
-    );
-    const leg = result.results?.[0];
-    if (!leg?.ok) {
-      routeMessage.value = "Impossible de calculer l'itinéraire.";
-      return;
-    }
-    const km = (leg.distanceM / 1000).toFixed(1);
-    const minutes = Number.isFinite(leg.durationS) ? Math.round(leg.durationS / 60) : null;
-    routeMessage.value = leg.fallback
-      ? `⚠️ Itinéraire indisponible — ligne directe : ${km} km`
-      : `${km} km${minutes ? ` · ~${minutes} min` : ''} (${routeMode.value})`;
+    routeMessage.value = await runRoute({
+      fromPoint: { lat: parseFloat(from.latitude), lng: parseFloat(from.longitude) },
+      toPoint: { lat: parseFloat(to.latitude), lng: parseFloat(to.longitude) },
+      fromLabel: from.name,
+      toLabel: to.name,
+      mode: routeMode.value,
+    });
   } catch (error) {
     routeMessage.value = "Erreur pendant le calcul de l'itinéraire.";
     console.error('[GevGlobeMap] computeRoute failed:', error);
   } finally {
     routeComputing.value = false;
+  }
+};
+
+const computeAddressRoute = async () => {
+  if (!app || !placeSearch) return;
+  const fromQuery = addressFromQuery.value.trim();
+  const toQuery = addressToQuery.value.trim();
+  if (!fromQuery || !toQuery) {
+    addressRouteMessage.value = 'Renseignez une adresse de départ et une d’arrivée.';
+    return;
+  }
+
+  addressRouteComputing.value = true;
+  addressRouteMessage.value = '';
+  try {
+    const [fromResult, toResult] = await Promise.all([
+      placeSearch.geocode(fromQuery),
+      placeSearch.geocode(toQuery),
+    ]);
+    if (!fromResult.place) {
+      addressRouteMessage.value = `Adresse de départ introuvable : "${fromQuery}"`;
+      return;
+    }
+    if (!toResult.place) {
+      addressRouteMessage.value = `Adresse d'arrivée introuvable : "${toQuery}"`;
+      return;
+    }
+    addressRouteMessage.value = await runRoute({
+      fromPoint: fromResult.place,
+      toPoint: toResult.place,
+      fromLabel: fromResult.place.label || fromQuery,
+      toLabel: toResult.place.label || toQuery,
+      mode: addressRouteMode.value,
+    });
+  } catch (error) {
+    addressRouteMessage.value = "Erreur pendant le calcul de l'itinéraire.";
+    console.error('[GevGlobeMap] computeAddressRoute failed:', error);
+  } finally {
+    addressRouteComputing.value = false;
   }
 };
 
@@ -376,6 +464,9 @@ onBeforeUnmount(async () => {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+.gev-tool-inline + .gev-tool-inline {
+  margin-top: 6px;
 }
 .gev-tool-input {
   flex: 1 1 180px;

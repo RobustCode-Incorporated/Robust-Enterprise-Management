@@ -37,12 +37,21 @@ marchandises entre revendeurs/dépôts), donc deux capacités de recherche de
   texte + bouton "Localiser" pose un pin et recentre la caméra (`flyTo: true`)
   sur l'adresse trouvée. Utile pour localiser une nouvelle adresse de
   livraison ou un nouveau dépôt sans connaître ses coordonnées GPS.
-- **Itinéraire logistique** — deux menus déroulants (revendeurs actuels) +
-  un mode (voiture/vélo/à pied) calculent un vrai trajet routier via
-  l'annotation `{ type: 'route', points, mode }` du moteur GEV, qui affiche
-  la distance et la durée. Si le calcul échoue, GEV dégrade honnêtement vers
-  une ligne droite étiquetée "itinéraire indisponible" plutôt que d'inventer
-  un trajet — ce comportement vient de `gods-eye-view` sans code ajouté ici.
+- **Itinéraire logistique (revendeurs)** — deux menus déroulants (revendeurs
+  actuels) + un mode (voiture/vélo/à pied) calculent un vrai trajet routier
+  via l'annotation `{ type: 'route', points, mode }` du moteur GEV, qui
+  affiche la distance et la durée.
+- **Trajet entre deux adresses libres** — même capacité, mais pour une
+  adresse X → une adresse Y tapées au clavier (pas forcément des revendeurs
+  connus, ex: une nouvelle adresse de livraison). Chaque adresse est d'abord
+  géocodée via `placeSearch.geocode()`, puis les coordonnées obtenues
+  alimentent la même annotation `route` que ci-dessus. Les deux formulaires
+  partagent une fonction interne commune (`runRoute`) : seule la résolution
+  du point de départ/arrivée diffère (revendeur connu vs adresse à géocoder).
+
+Dans les deux cas, si le calcul échoue, GEV dégrade honnêtement vers une
+ligne droite étiquetée "itinéraire indisponible" plutôt que d'inventer un
+trajet — ce comportement vient de `gods-eye-view` sans code ajouté ici.
 
 Le routage a besoin d'un serveur qui parle le protocole attendu par
 `gods-eye-view/search` (`{ ok, geometry, distanceM, durationS }`) — ce
@@ -76,9 +85,11 @@ l'itération 1, corrigé ici).
   A → B pour l'instant, alors que GEV supporte déjà des waypoints multiples
   (`points: [...]`) côté moteur — une extension naturelle, pas un nouveau
   concept à inventer.
-- Pas de notion de "dépôt" distincte du champ texte `deposit_name` : la
-  recherche d'itinéraire part d'un revendeur vers un autre, faute de
-  coordonnées propres aux dépôts dans le schéma actuel.
+- Pas de notion de "dépôt" distincte du champ texte `deposit_name` dans le
+  schéma actuel (pas de coordonnées propres à un dépôt) — contournable pour
+  l'instant via "Trajet entre deux adresses" en tapant l'adresse du dépôt,
+  mais un vrai dépôt géolocalisé resterait plus fiable qu'un géocodage à
+  chaque calcul.
 
 ## Comment tester
 
