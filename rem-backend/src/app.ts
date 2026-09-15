@@ -6,6 +6,7 @@ import { salesRouter } from './routes/sales.routes';
 import { authRouter } from './routes/auth.routes';
 import { resellerRouter } from './routes/reseller.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import { routeRouter } from './routes/route.routes';
 
 const logger = pino({ transport: { target: 'pino-pretty' } });
 const app = express();
@@ -29,8 +30,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Aiguillage des modules applicatifs
 app.use('/api/sales', salesRouter); // Le point d'entrée inclut maintenant /resellers-location
 app.use('/api/auth', authRouter);
-app.use('/api/resellers', resellerRouter); 
+app.use('/api/resellers', resellerRouter);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/route', routeRouter); // Proxy OSRM pour les itinéraires logistiques du globe (gods-eye-view/search)
 
 // Récupération du catalogue (CORRIGÉ : Ajout de 'currency' dans le SELECT)
 app.get('/api/products', async (req: Request, res: Response): Promise<void> => {

@@ -26,12 +26,59 @@ ne répète que ce qui concerne ce prototype précis.
   `gods-eye-view` (github:bilawalsidhu/gods-eye-view), `cesium`, et en
   devDependency `vite-plugin-cesium` (branché dans `vite.config.js`).
 
+## Itération 2 : spécificités "recherche" de GEV, pour la logistique
+
+Objectif : la plateforme évolue vers la logistique (déplacement de
+marchandises entre revendeurs/dépôts), donc deux capacités de recherche de
+`gods-eye-view/search` ont été branchées sur le prototype :
+
+- **Recherche d'adresse** — `createDefaultPlaceSearch(...).geocode(query)`,
+  keyless via Photon (OpenStreetMap) par défaut, aucune clé requise. Un champ
+  texte + bouton "Localiser" pose un pin et recentre la caméra (`flyTo: true`)
+  sur l'adresse trouvée. Utile pour localiser une nouvelle adresse de
+  livraison ou un nouveau dépôt sans connaître ses coordonnées GPS.
+- **Itinéraire logistique** — deux menus déroulants (revendeurs actuels) +
+  un mode (voiture/vélo/à pied) calculent un vrai trajet routier via
+  l'annotation `{ type: 'route', points, mode }` du moteur GEV, qui affiche
+  la distance et la durée. Si le calcul échoue, GEV dégrade honnêtement vers
+  une ligne droite étiquetée "itinéraire indisponible" plutôt que d'inventer
+  un trajet — ce comportement vient de `gods-eye-view` sans code ajouté ici.
+
+Le routage a besoin d'un serveur qui parle le protocole attendu par
+`gods-eye-view/search` (`{ ok, geometry, distanceM, durationS }`) — ce
+protocole n'est pas exposé dans le package public de GEV (son propre proxy
+`/api/route` est interne à son serveur standalone). Un petit proxy a donc été
+ajouté côté `rem-backend` :
+[src/controllers/route.controller.ts](../rem-backend/src/controllers/route.controller.ts)
++ [src/routes/route.routes.ts](../rem-backend/src/routes/route.routes.ts),
+monté sur `GET /api/route`, qui interroge **router.project-osrm.org** (le
+serveur de démonstration public d'OSRM) et reformate sa réponse.
+
+⚠️ **router.project-osrm.org est un service de démo**, pas garanti pour de la
+production (quotas, disponibilité). Pour la suite : pointer la variable
+d'env `OSRM_URL` du backend vers une instance OSRM auto-hébergée, ou un
+fournisseur commercial (Mapbox Directions, GraphHopper, etc.) — aucun autre
+changement n'est nécessaire côté frontend, le contrat reste le même.
+
+Conséquence sur le polling existant : `fetchResellers()` n'appelle plus
+`annotations.clear()` avant de re-poser les pins — l'engine GEV de-dup un pin
+identique au lieu de le dupliquer, donc le rafraîchissement de 45 s n'efface
+plus une recherche d'adresse ou un itinéraire en cours (bug latent de
+l'itération 1, corrigé ici).
+
 ## Ce qui n'a pas été fait (hors périmètre du prototype)
 
 - Pas de mode heatmap (pas d'équivalent direct côté Cesium dans ce prototype).
 - Pas de remplacement de `ResellersMap.vue` — les deux cartes coexistent.
 - Le popup analytics (donut + top produits) n'a pas été porté sur le globe ;
   seul le pin + libellé (nom + dépôt) est affiché pour l'instant.
+- Pas d'itinéraire multi-arrêts (tournée de livraison) : seulement un trajet
+  A → B pour l'instant, alors que GEV supporte déjà des waypoints multiples
+  (`points: [...]`) côté moteur — une extension naturelle, pas un nouveau
+  concept à inventer.
+- Pas de notion de "dépôt" distincte du champ texte `deposit_name` : la
+  recherche d'itinéraire part d'un revendeur vers un autre, faute de
+  coordonnées propres aux dépôts dans le schéma actuel.
 
 ## Comment tester
 
