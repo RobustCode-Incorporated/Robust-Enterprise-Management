@@ -11,11 +11,13 @@ const router = createRouter({
     { path: '/register', component: () => import('../views/RegisterCompany.vue') },
     { path: '/confidentiality-agreement', component: () => import('../views/ConfidentialityAgreement.vue') },
     { path: '/reseller-dashboard', component: ResellerDashboard },
-    { 
-      path: '/dashboard', 
+    {
+      path: '/dashboard',
       component: () => import('../views/Dashboard.vue'),
       meta: { requiresAuth: true }
-    }
+    },
+    // Prototype Option B (globe GEV minimal) — isolé, ne touche à aucune route existante.
+    { path: '/globe-prototype', component: () => import('../views/GlobePrototype.vue') }
   ]
 });
 
