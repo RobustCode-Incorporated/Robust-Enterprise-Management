@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rem_sales_mobile/main.dart';
+import 'package:rem_sales_mobile/core/session/session_service.dart';
 import 'package:rem_sales_mobile/features/sales/data/datasources/sync_manager.dart';
 
 // Création des mocks nécessaires pour simuler le démarrage de MyApp
@@ -28,6 +29,7 @@ void main() {
       syncManager: mockSyncManager,
       httpClient: mockHttpClient,
       secureStorage: mockSecureStorage,
+      session: SessionService(storage: mockSecureStorage),
     ));
 
     // Simple vérification que le moteur de rendu a démarré sans planter

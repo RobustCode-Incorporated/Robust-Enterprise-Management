@@ -3,17 +3,21 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:isar/isar.dart';
 import 'package:rem_sales_mobile/features/sales/data/models/local_sales_document.dart';
+import '../../../../core/config/api_config.dart';
+import '../../../../core/session/session_service.dart';
 
 class SyncManager {
   final Isar isar;
   final http.Client httpClient;
-  
-  // URL de notre API Backend Node.js / Express (à externaliser plus tard en variable d'env)
-  final String baseUrl = 'https://api.robust-management.internal/v1';
+  // Optionnel pour rester compatible avec les tests existants qui
+  // construisent SyncManager sans session ; en usage réel, main.dart
+  // fournit toujours la session connectée.
+  final SessionService? session;
 
   SyncManager({
     required this.isar,
     required this.httpClient,
+    this.session,
   });
 
   /// Tente de synchroniser un document spécifique avec le serveur central
@@ -40,11 +44,16 @@ class SyncManager {
       };
 
       // 3. Expédition de la requête avec clé d'idempotence pour éviter les doublons au backend
+      // NOTE : le backend expose aussi POST /api/sales/sync (idempotent, dédié à
+      // ce flux offline) dont le format de payload exact n'a pas encore été
+      // vérifié ici — cible laissée sur /sales/documents pour cette phase
+      // (correction de l'hôte/auth uniquement) ; à réévaluer séparément.
       final response = await httpClient.post(
-        Uri.parse('$baseUrl/sales/documents'),
+        ApiConfig.path('/sales/documents'),
         headers: {
           'Content-Type': 'application/json',
           'X-Idempotency-Key': localDoc.id, // L'UUID local sert de clé d'idempotence
+          if (session?.token != null) 'Authorization': 'Bearer ${session!.token}',
         },
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 10));

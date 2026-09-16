@@ -1,28 +1,25 @@
 import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import '../../../../core/config/api_config.dart';
+import '../../../../core/session/session_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final http.Client httpClient;
-  final FlutterSecureStorage secureStorage;
-  
-  // URL de ton serveur backend (à adapter selon ton déploiement)
-  // En local Codespace, on utilise souvent l'URL publique générée ou l'IP du conteneur
-  final String authUrl = 'https://animated-lamp-pjppjx9p9pqg367vg-3000.app.github.dev/'; 
+  final SessionService session;
 
   AuthBloc({
     required this.httpClient,
-    required this.secureStorage,
+    required this.session,
   }) : super(AuthInitial()) {
-    
+
     // Gestion de l'événement de démarrage
     on<AppStartedEvent>((event, emit) async {
-      final token = await secureStorage.read(key: 'jwt_token');
-      if (token != null) {
-        emit(Authenticated(token: token));
+      await session.loadFromStorage();
+      if (session.token != null) {
+        emit(Authenticated(token: session.token!));
       } else {
         emit(const Unauthenticated());
       }
@@ -33,7 +30,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthLoading());
       try {
         final response = await httpClient.post(
-          Uri.parse(authUrl),
+          ApiConfig.path('/auth/login'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'email': event.email,
@@ -43,11 +40,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
-          final token = data['token']; // On extrait le token du JSON du backend
+          final String token = data['token']; // On extrait le token du JSON du backend
 
-          // 🔐 Sauvegarde chiffrée immédiate dans le téléphone
-          await secureStorage.write(key: 'jwt_token', value: token);
-          
+          // 🔐 Sauvegarde chiffrée immédiate + décode des claims (companyId/role)
+          await session.persistSession(token);
+
           emit(Authenticated(token: token));
         } else {
           final data = jsonDecode(response.body);
@@ -61,7 +58,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // Gestion de la déconnexion
     on<LogoutRequestedEvent>((event, emit) async {
       emit(AuthLoading());
-      await secureStorage.delete(key: 'jwt_token');
+      await session.clear();
       emit(const Unauthenticated());
     });
   }
